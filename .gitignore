@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# DART 캐시 및 다운로드 산출물
+CORPCODE.xml
+downloads/
+*.done
+
+# IDE
+.vscode/
+.idea/
+
+# 대용량 배포 실행파일 (원본 참고용, 버전관리 제외)
+*.exe

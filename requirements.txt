@@ -1,0 +1,4 @@
+# dart_downloader 실행에 필요한 패키지 (Python 3.12+)
+# exe에 번들되어 있던 버전 기준
+customtkinter==6.0.0
+requests>=2.31
