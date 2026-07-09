@@ -54,16 +54,25 @@ python dart_gui.py
 **수익성**(마진·ROE·ROA·ROIC)·**성장성**·**안정성**(부채비율·유동비율·이자보상배율)·
 **밸류에이션**(PER·PBR·PSR·EV/EBITDA·FCF수익률)을 함께 계산합니다.
 
+**데이터원 2가지** (플래그로 선택):
+
+| 소스 | 플래그 | 성격 |
+|---|---|---|
+| **SEC EDGAR** (`sec_engine.py`) | `--edgar` (기본) | 공식 XBRL, 정확·안정. 미국 국내기업(10-K). 예: NVDA FY2023 영업이익을 GAAP 공식값으로 정확히 반영 |
+| **Yahoo/yfinance** (`us_engine.py`) | `--yahoo` | 빠르고 외국기업(20-F, 예: TSM)도 커버. 비공식 |
+
 ```bash
-python us_report.py NVDA              # 단일 종목 상세 리포트
+python us_report.py NVDA              # 단일 상세 (기본: EDGAR)
 python us_report.py NVDA MSFT AVGO    # 여러 종목 각각
-python us_report.py --screen          # AI 밸류체인 기본 12종목 현금창출 랭킹
-python us_report.py --screen MU TSM   # 지정 종목 현금창출 랭킹
+python us_report.py --screen          # AI 밸류체인 12종목 현금창출 랭킹 (EDGAR)
+python us_report.py --screen MU AVGO  # 지정 종목 랭킹
+python us_report.py --yahoo TSM       # 외국기업은 Yahoo 소스로
 ```
 
 > 과거 재무 기준의 **스크리닝(후보 압축)** 도구입니다 — 미래 예측이 아닙니다.
-> 재무 보고통화가 시총 통화와 다른 종목(예: TSM=TWD)은 금액을 보고통화로 표시하고
-> FCF수익률은 생략합니다.
+> EDGAR는 펀더멘털만 제공하므로 주가·시가총액·밸류에이션은 경량 현재가 조회로 보완합니다.
+> 외국기업(20-F)은 us-gaap XBRL이 없어 EDGAR에서 조회 실패할 수 있습니다 → `--yahoo` 사용.
+> Yahoo 소스에서 보고통화≠시총통화(예: TSM=TWD)인 종목은 금액을 보고통화로 표시하고 FCF수익률은 생략합니다.
 
 ## 파일 구성
 
@@ -72,7 +81,8 @@ python us_report.py --screen MU TSM   # 지정 종목 현금창출 랭킹
 | `dart_engine.py` | DART API 호출·응답 파싱 로직 (17개 공개 함수) |
 | `dart_gui.py` | CustomTkinter GUI (`DartApp` 클래스) |
 | `us_engine.py` | 미국 재무분석 엔진 (yfinance, `analyze`/`screen`) |
-| `us_report.py` | 미국 분석 CLI 리포트·스크리너 데모 |
+| `sec_engine.py` | 미국 재무분석 엔진 (SEC EDGAR 공식, `us_engine`과 동일 인터페이스) |
+| `us_report.py` | 미국 분석 CLI 리포트·스크리너 데모 (`--edgar`/`--yahoo`) |
 | `requirements.txt` | 의존성 (customtkinter, requests, yfinance, pandas) |
 | `dart_downloader.exe` | 원본 배포 실행파일 (참고용) |
 

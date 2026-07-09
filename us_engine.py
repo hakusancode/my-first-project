@@ -297,6 +297,7 @@ def analyze(ticker, log_fn=None):
         "annual": annual,
         "growth": growth,
         "latest": annual[-1] if annual else None,
+        "source": "Yahoo Finance",
     })
     return result
 

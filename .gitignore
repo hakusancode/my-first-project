@@ -11,6 +11,9 @@ CORPCODE.xml
 downloads/
 *.done
 
+# SEC EDGAR 로컬 캐시 (companyfacts JSON)
+sec_cache/
+
 # IDE
 .vscode/
 .idea/

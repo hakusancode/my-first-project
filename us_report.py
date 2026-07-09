@@ -1,11 +1,16 @@
 """
-us_report.py — 미국 기업 재무분석 CLI 데모 (us_engine 기반)
+us_report.py — 미국 기업 재무분석 CLI 데모
+
+데이터원 2가지를 선택할 수 있다:
+    --edgar   SEC EDGAR 공식 XBRL (기본) — 정확·안정, 미국 국내기업(10-K)
+    --yahoo   yfinance(Yahoo) — 빠르고 외국기업(20-F, 예: TSM)도 커버
 
 사용법:
-    python us_report.py NVDA              # 단일 종목 상세 리포트
-    python us_report.py NVDA MSFT AVGO    # 여러 종목 각각 상세
-    python us_report.py --screen          # AI 밸류체인 기본 유니버스 현금창출 랭킹
-    python us_report.py --screen MU TSM    # 지정 종목들 현금창출 랭킹
+    python us_report.py NVDA               # 단일 종목 상세 (기본: EDGAR)
+    python us_report.py NVDA MSFT AVGO     # 여러 종목 각각
+    python us_report.py --screen           # AI 밸류체인 기본 유니버스 현금창출 랭킹
+    python us_report.py --screen MU AVGO   # 지정 종목 랭킹
+    python us_report.py --yahoo TSM        # Yahoo 소스로 조회
 
 현금창출능력(영업현금흐름·FCF·이익의 질)을 중심에 두고
 수익성·성장성·안정성·밸류에이션을 함께 보여준다.
@@ -13,6 +18,7 @@ us_report.py — 미국 기업 재무분석 CLI 데모 (us_engine 기반)
 
 import sys
 import us_engine as ue
+import sec_engine as se
 
 
 # ── 포맷 헬퍼 ────────────────────────────────────────────────────────────────
@@ -73,8 +79,8 @@ def _cols(header, rows, aligns=None):
 
 # ── 단일 종목 리포트 ─────────────────────────────────────────────────────────
 
-def report(ticker):
-    a = ue.analyze(ticker, log_fn=lambda m: None)
+def report(ticker, eng=se):
+    a = eng.analyze(ticker, log_fn=lambda m: None)
     if not a["ok"]:
         print(f"\n[{ticker.upper()}] ✗ {a['error']}")
         return
@@ -87,6 +93,7 @@ def report(ticker):
     sub = " · ".join(x for x in [ov["sector"], ov["industry"]] if x)
     if sub:
         print(f"  {sub}")
+    print(f"  데이터원: {a.get('source', 'Yahoo Finance')}")
     print("=" * 72)
 
     print(f"  현재가 {money(ov['price'], cur) if ov['price'] and ov['price']<1e6 else num(ov['price'])}"
@@ -150,9 +157,10 @@ def report(ticker):
 
 # ── 스크리너 (현금창출 랭킹) ─────────────────────────────────────────────────
 
-def screen(tickers):
-    print(f"\n현금창출 스크리닝 ({len(tickers)}개 종목)...\n")
-    rows = ue.screen(tickers, log_fn=lambda m: print(f"  · {m}"))
+def screen(tickers, eng=se):
+    src = "SEC EDGAR" if eng is se else "Yahoo Finance"
+    print(f"\n현금창출 스크리닝 ({len(tickers)}개 종목, 데이터원: {src})...\n")
+    rows = eng.screen(tickers, log_fn=lambda m: print(f"  · {m}"))
 
     print("\n" + "=" * 72)
     print("  AI 밸류체인 · 현금창출 랭킹 (최근 회계연도, FCF마진 내림차순)")
@@ -184,15 +192,24 @@ def screen(tickers):
 
 def main(argv):
     args = argv[1:]
+    # 데이터원 선택 플래그
+    eng = se  # 기본: SEC EDGAR
+    if "--yahoo" in args:
+        eng = ue
+        args = [a for a in args if a != "--yahoo"]
+    if "--edgar" in args:
+        eng = se
+        args = [a for a in args if a != "--edgar"]
+
     if not args:
         print(__doc__)
         return
     if args[0] in ("--screen", "-s"):
         tickers = args[1:] or ue.AI_UNIVERSE
-        screen(tickers)
+        screen(tickers, eng)
     else:
         for tk in args:
-            report(tk)
+            report(tk, eng)
 
 
 if __name__ == "__main__":
