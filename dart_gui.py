@@ -6,8 +6,9 @@ from tkinter import filedialog
 
 import customtkinter as ctk
 
-from dart_engine import (calculate_financial_ratios, download_document, get_audit_opinion_3y,
-    get_capital_changes, get_dividend_info_3y, get_employee_status, get_equity_investments,
+from dart_engine import (calculate_financial_ratios, calculate_cashflow_metrics,
+    download_document, get_audit_opinion_3y, get_capital_changes, get_cashflow_3y,
+    get_dividend_info_3y, get_employee_status, get_equity_investments,
     get_extended_financials_3y, get_key_financials_3y, get_major_shareholder, list_disclosures,
     load_corp_list, search_company)
 
@@ -21,7 +22,27 @@ _FIN_LABELS = ['매출액', '영업이익', '당기순이익', '자산총계', '
 _DIV_LABELS = ['주당배당금(원)', '배당성향(%)', '시가배당률(%)', '현금배당총액(백만원)']
 _RATIO_LABELS = ['영업이익률', '순이익률', '부채비율', 'ROE', 'ROA', '매출총이익률', '매출원가율', '총포괄이익률']
 
-_ANALYSIS_TABS = ['핵심재무', '배당', '타법인출자', '재무지표', '감사', '최대주주', '직원', '자본변동']
+_ANALYSIS_TABS = ['핵심재무', '현금흐름', '배당', '타법인출자', '재무지표', '감사', '최대주주', '직원', '자본변동']
+
+# 현금흐름 탭에 표시할 (표시 라벨, 데이터 키, 종류) — 종류: money|pct|mult
+_CF_ROWS = [
+    ('영업활동현금흐름', '영업활동현금흐름', 'money'),
+    ('CapEx(유형자산취득)', 'CapEx', 'money'),
+    ('잉여현금흐름(FCF)', '잉여현금흐름', 'money'),
+    ('FCF 마진', 'FCF마진', 'pct'),
+    ('이익의 질(CFO/영업이익)', '이익의질', 'mult'),
+    ('CapEx 강도(/매출)', 'CapEx강도', 'pct'),
+    ('투자활동현금흐름', '투자활동현금흐름', 'money'),
+    ('재무활동현금흐름', '재무활동현금흐름', 'money'),
+]
+
+
+def _fmt_mult(val):
+    '''배수 포맷 + 색상.'''
+    if val is None:
+        return ('N/A', 'gray50')
+    color = '#FF6B6B' if val < 0 else 'white'
+    return (f'{val:.2f}x', color)
 
 
 def _fmt_val(val):
@@ -181,6 +202,16 @@ class DartApp(ctk.CTk):
         self._fin_content.grid_columnconfigure(0, weight=1)
         self._fin_content.grid_rowconfigure(0, weight=1)
         self._render_fin('initial')
+        cf_tab = tabview.tab('현금흐름')
+        cf_tab.grid_columnconfigure(0, weight=1)
+        cf_tab.grid_rowconfigure(1, weight=1)
+        self._cf_title = ctk.CTkLabel(cf_tab, text='기업분석 — 현금흐름', font=ctk.CTkFont(size=13, weight='bold'))
+        self._cf_title.grid(row=0, column=0, padx=12, pady=(10, 4), sticky='w')
+        self._cf_content = ctk.CTkFrame(cf_tab, fg_color='transparent')
+        self._cf_content.grid(row=1, column=0, sticky='nsew', padx=4, pady=4)
+        self._cf_content.grid_columnconfigure(0, weight=1)
+        self._cf_content.grid_rowconfigure(0, weight=1)
+        self._render_cashflow('initial')
         div_tab = tabview.tab('배당')
         div_tab.grid_columnconfigure(0, weight=1)
         div_tab.grid_rowconfigure(1, weight=1)
@@ -335,6 +366,7 @@ class DartApp(ctk.CTk):
         code = self.selected_corp['corp_code']
         self.selected_label.configure(text=f'선택된 회사: {name}  ({code})', text_color='white')
         self._fin_title.configure(text=f'{name} — 핵심재무')
+        self._cf_title.configure(text=f'{name} — 현금흐름')
         self._div_title.configure(text=f'{name} — 배당')
         self._eqt_title.configure(text=f'{name} — 타법인출자')
         self._ratio_title.configure(text=f'{name} — 재무지표')
@@ -343,6 +375,7 @@ class DartApp(ctk.CTk):
         self._emp_title.configure(text=f'{name} — 직원')
         self._cap_title.configure(text=f'{name} — 자본변동')
         self._load_financials()
+        self._load_cashflow()
         self._load_dividends()
         self._load_equity()
         self._load_audit()
@@ -375,6 +408,57 @@ class DartApp(ctk.CTk):
                 self._log(f'재무 데이터 오류: {e}')
                 self.after(0, lambda: self._render_fin('error'))
                 self.after(0, lambda: self._render_ratio('error'))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _render_cashflow(self, state, data=None, years=None):
+        "현금흐름 탭 컨텐츠 갱신. state: 'initial'|'loading'|'done'|'error'"
+        for w in self._cf_content.winfo_children():
+            w.destroy()
+        msgs = {'initial': ('회사를 선택하면 현금흐름 데이터가 표시됩니다.', 'gray'),
+                'loading': ('불러오는 중...', 'gray'),
+                'error': ('데이터를 불러오지 못했습니다.', '#FF6B6B')}
+        if state in msgs:
+            text, color = msgs[state]
+            ctk.CTkLabel(self._cf_content, text=text, text_color=color).grid(row=0, column=0)
+            return
+        f = ctk.CTkFrame(self._cf_content, fg_color='transparent')
+        f.grid(row=0, column=0, sticky='n', padx=8, pady=8)
+        col_w = 130
+        ctk.CTkLabel(f, text='항목', font=ctk.CTkFont(weight='bold'), width=180, anchor='w').grid(row=0, column=0, padx=(0, 8), pady=4, sticky='w')
+        for ci, yr in enumerate(years):
+            ctk.CTkLabel(f, text=f'{yr}년', font=ctk.CTkFont(weight='bold'), width=col_w, anchor='e').grid(row=0, column=ci + 1, padx=4, pady=4)
+        sep = ctk.CTkFrame(f, height=1, fg_color='gray40')
+        sep.grid(row=1, column=0, columnspan=len(years) + 1, sticky='ew', pady=2)
+        for ri, (label, key, kind) in enumerate(_CF_ROWS):
+            ctk.CTkLabel(f, text=label, width=180, anchor='w').grid(row=ri + 2, column=0, padx=(0, 8), pady=6, sticky='w')
+            for ci, row_data in enumerate(data):
+                val = row_data.get(key)
+                if kind == 'money':
+                    text, color = _fmt_val(val)
+                elif kind == 'pct':
+                    text, color = _fmt_ratio_val(val)
+                else:
+                    text, color = _fmt_mult(val)
+                ctk.CTkLabel(f, text=text, text_color=color, width=col_w, anchor='e').grid(row=ri + 2, column=ci + 1, padx=4, pady=6)
+
+    def _load_cashflow(self):
+        corp = self.selected_corp
+        api_key = self.api_key_var.get().strip()
+        end_year = str(int(self.end_year_var.get()) - 1)
+
+        self.after(0, lambda: self._render_cashflow('loading'))
+
+        def run():
+            try:
+                key = get_key_financials_3y(api_key, corp['corp_code'], end_year, log_fn=self._log)
+                cf = get_cashflow_3y(api_key, corp['corp_code'], end_year, log_fn=self._log)
+                metrics = calculate_cashflow_metrics(key, cf)
+                years = [r['year'] for r in metrics]
+                self.after(0, lambda: self._render_cashflow('done', data=metrics, years=years))
+            except Exception as e:
+                self._log(f'현금흐름 데이터 오류: {e}')
+                self.after(0, lambda: self._render_cashflow('error'))
 
         threading.Thread(target=run, daemon=True).start()
 

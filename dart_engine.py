@@ -557,6 +557,122 @@ def get_extended_financials_3y(api_key, corp_code, end_year, reprt_code='11011',
     ]
 
 
+# ── 현금흐름(현금창출능력) ─────────────────────────────────────────────────
+# fnlttSinglAcntAll(_EXT_FIN_URL)에서 sj_div='CF'(현금흐름표) 항목을 사용한다.
+# (target label, [account_nm 부분일치 키워드 우선순위])
+_CF_TARGETS = (
+    ('영업활동현금흐름', ['영업활동현금흐름', '영업활동으로 인한 현금흐름', '영업활동']),
+    ('투자활동현금흐름', ['투자활동현금흐름', '투자활동으로 인한 현금흐름', '투자활동']),
+    ('재무활동현금흐름', ['재무활동현금흐름', '재무활동으로 인한 현금흐름', '재무활동']),
+    ('CapEx', ['유형자산의 취득', '유형자산의취득', '유형자산의 증가']),
+)
+
+
+def _cf_find(cf_items, keywords):
+    """CF 항목에서 keywords(우선순위)로 account_nm 부분일치 첫 결과 반환."""
+    for kw in keywords:
+        for item in cf_items:
+            if kw in item.get('account_nm', ''):
+                return item
+    return None
+
+
+def get_cashflow_3y(api_key, corp_code, end_year, reprt_code='11011', log_fn=None):
+    """
+    fnlttSinglAcntAll의 현금흐름표(CF)에서 3개년 현금흐름을 반환한다.
+    thstrm/frmtrm/bfefrmtrm 3열을 한 번에 제공하므로 1회 호출로 3개년.
+    CFS 우선, CF 항목 없으면 OFS 재시도.
+    반환값: [{"year":str, "fs_div":str, "영업활동현금흐름":int|None,
+             "투자활동현금흐름":int|None, "재무활동현금흐름":int|None,
+             "CapEx":int|None(음수=유출)}, ...]  (오름차순)
+    """
+    def log(msg):
+        if log_fn:
+            log_fn(msg)
+
+    log(f"현금흐름 3개년 조회 중 (기준연도={end_year})...")
+    for fs in ('CFS', 'OFS'):
+        resp = requests.get(_EXT_FIN_URL, params={
+            'crtfc_key': api_key,
+            'corp_code': corp_code,
+            'bsns_year': end_year,
+            'reprt_code': reprt_code,
+            'fs_div': fs,
+        })
+        data = resp.json()
+
+        if data.get('status') != '000':
+            raise RuntimeError(f"fnlttSinglAcntAll 오류: {data.get('status')} {data.get('message')}")
+
+        cf = [i for i in data.get('list', []) if i.get('sj_div') == 'CF']
+        if not cf:
+            continue
+        log(f"현금흐름 CF {len(cf)}건 수신 ({fs})")
+
+        year_col = [
+            (str(int(end_year) - 2), 'bfefrmtrm_amount'),
+            (str(int(end_year) - 1), 'frmtrm_amount'),
+            (str(int(end_year)), 'thstrm_amount'),
+        ]
+
+        results = []
+        for yr, col in year_col:
+            row_data = {'year': yr, 'fs_div': fs}
+            for key, kws in _CF_TARGETS:
+                item = _cf_find(cf, kws)
+                row_data[key] = _ext_parse(item.get(col, '') if item else '')
+            results.append(row_data)
+        return results
+
+    years = [str(int(end_year) - i) for i in range(2, -1, -1)]
+    return [
+        {'year': y, 'fs_div': None, '영업활동현금흐름': None,
+         '투자활동현금흐름': None, '재무활동현금흐름': None, 'CapEx': None}
+        for y in years
+    ]
+
+
+def calculate_cashflow_metrics(key_3y, cashflow_3y):
+    """
+    핵심재무(key_3y: 매출액·영업이익 포함)와 현금흐름(cashflow_3y)을 결합해
+    연도별 현금창출 지표를 계산한다.
+    반환값: [{"year":str, "영업활동현금흐름":int|None, "CapEx":int|None(양수=유출액),
+             "잉여현금흐름":int|None, "FCF마진":float|None, "이익의질":float|None,
+             "CapEx강도":float|None, "투자활동현금흐름":int|None,
+             "재무활동현금흐름":int|None}, ...]  (오름차순)
+    이익의질 = CFO/영업이익(배수), FCF마진·CapEx강도 = %(매출 대비).
+    """
+    key_by_year = {r['year']: r for r in (key_3y or [])}
+    out = []
+    for cf in cashflow_3y:
+        yr = cf['year']
+        k = key_by_year.get(yr, {})
+        revenue = k.get('매출액')
+        op_income = k.get('영업이익')
+        cfo = cf.get('영업활동현금흐름')
+        capex_raw = cf.get('CapEx')
+        capex_abs = None if capex_raw is None else abs(capex_raw)
+        fcf = None if (cfo is None or capex_abs is None) else cfo - capex_abs
+
+        def pct(a, b):
+            if a is None or b is None or b == 0:
+                return None
+            return a / b * 100.0
+
+        out.append({
+            'year': yr,
+            '영업활동현금흐름': cfo,
+            'CapEx': capex_abs,
+            '잉여현금흐름': fcf,
+            'FCF마진': pct(fcf, revenue),
+            '이익의질': (None if (cfo is None or not op_income) else cfo / op_income),
+            'CapEx강도': pct(capex_abs, revenue),
+            '투자활동현금흐름': cf.get('투자활동현금흐름'),
+            '재무활동현금흐름': cf.get('재무활동현금흐름'),
+        })
+    return out
+
+
 _EQUITY_URL = 'https://opendart.fss.or.kr/api/otrCprInvstmntSttus.json'
 
 

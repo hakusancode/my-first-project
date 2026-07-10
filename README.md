@@ -38,6 +38,7 @@ python dart_gui.py
 | 탭 | 내용 | DART API |
 |---|---|---|
 | 핵심재무 | 3개년 매출/영업이익/순이익/자산·부채·자본 (연결 우선) | `fnlttSinglAcnt` |
+| **현금흐름** | 영업활동현금흐름·CapEx·**FCF**·FCF마진·**이익의 질**(CFO/영업이익)·CapEx강도 | `fnlttSinglAcntAll`(CF) |
 | 재무지표 | 영업이익률·순이익률·ROA·매출총이익률·매출원가율 등 (계산) | — |
 | 배당 | 주당배당금·배당성향·시가배당률·현금배당총액 3개년 | `alotMatter` |
 | 타법인출자 | 법인명·취득일·지분율·장부가액 | `otrCprInvstmntSttus` |
