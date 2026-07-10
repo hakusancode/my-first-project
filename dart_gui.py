@@ -149,8 +149,8 @@ class DartApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title('DART 공시 다운로더')
-        self.geometry('1300x720')
-        self.minsize(1000, 580)
+        self.geometry('1480x820')
+        self.minsize(1100, 620)
 
         self.corp_list = None
         self._search_results = []
@@ -161,8 +161,9 @@ class DartApp(ctk.CTk):
         self._build_ui()
 
     def _build_ui(self):
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_columnconfigure(1, weight=1)
+        # 좌:우 = 2:3 — 분석(우측) 패널에 더 넓은 공간 배분 (미국 뷰 연도 컬럼 표시)
+        self.grid_columnconfigure(0, weight=2, uniform='cols')
+        self.grid_columnconfigure(1, weight=3, uniform='cols')
         self.grid_rowconfigure(0, weight=1)
         left = ctk.CTkFrame(self)
         left.grid(row=0, column=0, sticky='nsew', padx=(12, 4), pady=12)
@@ -453,16 +454,16 @@ class DartApp(ctk.CTk):
     def _us_table(self, start_row, title, rowdefs, annual, years):
         ctk.CTkLabel(self._us_frame, text=f'▸ {title}', font=ctk.CTkFont(size=13, weight='bold')).grid(row=start_row, column=0, sticky='w', padx=10, pady=(10, 2))
         f = ctk.CTkFrame(self._us_frame, fg_color='transparent')
-        f.grid(row=start_row + 1, column=0, sticky='w', padx=14, pady=(0, 4))
-        col_w = 96
-        ctk.CTkLabel(f, text='지표', font=ctk.CTkFont(weight='bold'), width=150, anchor='w').grid(row=0, column=0, padx=(0, 6), pady=3, sticky='w')
+        f.grid(row=start_row + 1, column=0, sticky='w', padx=12, pady=(0, 4))
+        col_w = 86
+        ctk.CTkLabel(f, text='지표', font=ctk.CTkFont(weight='bold'), width=150, anchor='w').grid(row=0, column=0, padx=(0, 4), pady=2, sticky='w')
         for ci, yr in enumerate(years):
-            ctk.CTkLabel(f, text=yr, font=ctk.CTkFont(weight='bold'), width=col_w, anchor='e').grid(row=0, column=ci + 1, padx=3, pady=3)
+            ctk.CTkLabel(f, text=yr, font=ctk.CTkFont(weight='bold'), width=col_w, anchor='e').grid(row=0, column=ci + 1, padx=2, pady=2)
         for ri, (label, key, kind) in enumerate(rowdefs):
-            ctk.CTkLabel(f, text=label, width=150, anchor='w').grid(row=ri + 1, column=0, padx=(0, 6), pady=3, sticky='w')
+            ctk.CTkLabel(f, text=label, width=150, anchor='w').grid(row=ri + 1, column=0, padx=(0, 4), pady=2, sticky='w')
             for ci, row_data in enumerate(annual):
                 text, color = _fmt_us(row_data.get(key), kind)
-                ctk.CTkLabel(f, text=text, text_color=color, width=col_w, anchor='e').grid(row=ri + 1, column=ci + 1, padx=3, pady=3)
+                ctk.CTkLabel(f, text=text, text_color=color, width=col_w, anchor='e').grid(row=ri + 1, column=ci + 1, padx=2, pady=2)
         return start_row + 2
 
     def _render_us(self, state, data=None):
