@@ -45,6 +45,58 @@ def _fmt_mult(val):
     return (f'{val:.2f}x', color)
 
 
+def _fmt_usd(val):
+    '''달러 금액 포맷 + 색상 ($T/$B/$M).'''
+    if val is None:
+        return ('N/A', 'gray50')
+    a = abs(val)
+    if a >= 1e12:
+        s = f'${a/1e12:.2f}T'
+    elif a >= 1e9:
+        s = f'${a/1e9:.1f}B'
+    elif a >= 1e6:
+        s = f'${a/1e6:.0f}M'
+    else:
+        s = f'${a:,.0f}'
+    return (f'-{s}', '#FF6B6B') if val < 0 else (s, 'white')
+
+
+# 미국 분석 뷰 표 정의: (표시라벨, annual dict 키, 종류) — 종류: usd|pct|mult
+_US_CASH_ROWS = [
+    ('영업활동현금흐름', 'cfo', 'usd'),
+    ('CapEx', 'capex', 'usd'),
+    ('잉여현금흐름(FCF)', 'fcf', 'usd'),
+    ('FCF 마진', 'fcf_margin', 'pct'),
+    ('이익의 질(CFO/영업익)', 'earnings_quality', 'mult'),
+    ('CapEx 강도(/매출)', 'capex_intensity', 'pct'),
+]
+_US_PROFIT_ROWS = [
+    ('매출액', 'revenue', 'usd'),
+    ('영업이익', 'operating_income', 'usd'),
+    ('순이익', 'net_income', 'usd'),
+    ('매출총이익률', 'gross_margin', 'pct'),
+    ('영업이익률', 'operating_margin', 'pct'),
+    ('순이익률', 'net_margin', 'pct'),
+    ('ROE', 'roe', 'pct'),
+    ('ROA', 'roa', 'pct'),
+    ('ROIC', 'roic', 'pct'),
+]
+_US_STAB_ROWS = [
+    ('부채비율(D/E)', 'debt_to_equity', 'mult'),
+    ('유동비율', 'current_ratio', 'mult'),
+    ('이자보상배율', 'interest_coverage', 'mult'),
+    ('순부채', 'net_debt', 'usd'),
+]
+
+
+def _fmt_us(val, kind):
+    if kind == 'usd':
+        return _fmt_usd(val)
+    if kind == 'pct':
+        return _fmt_ratio_val(val)
+    return _fmt_mult(val)
+
+
 def _fmt_val(val):
     '''금액 포맷 + 색상. (표시문자열, 텍스트 색상) 반환.'''
     if val is None:
@@ -95,6 +147,7 @@ class DartApp(ctk.CTk):
         self._search_results = []
         self.selected_corp = None
         self._fin_data = None
+        self.market_mode = 'KR'   # 'KR'(DART) | 'US'(EDGAR/Yahoo)
 
         self._build_ui()
 
@@ -113,7 +166,9 @@ class DartApp(ctk.CTk):
         right.grid(row=0, column=1, sticky='nsew', padx=(4, 12), pady=12)
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(0, weight=1)
-        self._build_analysis(right)
+        self._right = right
+        self._build_analysis(right)     # 한국(DART) 탭뷰 → self._kr_tabview
+        self._build_us_panel(right)     # 미국 분석 패널 → self._us_frame (초기 숨김)
 
     def _build_top(self, parent):
         f = ctk.CTkFrame(parent)
@@ -127,6 +182,10 @@ class DartApp(ctk.CTk):
         self.save_dir_var = tk.StringVar(value=_DEFAULT_DOWNLOADS)
         ctk.CTkEntry(f, textvariable=self.save_dir_var).grid(row=0, column=3, padx=4, pady=8, sticky='ew')
         ctk.CTkButton(f, text='찾아보기', width=80, command=self._browse_dir).grid(row=0, column=4, padx=(4, 10), pady=8)
+        self.market_seg = ctk.CTkSegmentedButton(
+            f, values=['🇰🇷 한국 (DART)', '🇺🇸 미국 (EDGAR)'], command=self._on_market_change)
+        self.market_seg.set('🇰🇷 한국 (DART)')
+        self.market_seg.grid(row=1, column=0, columnspan=5, padx=10, pady=(0, 8), sticky='w')
 
     def _build_mid(self, parent):
         f = ctk.CTkFrame(parent)
@@ -139,7 +198,8 @@ class DartApp(ctk.CTk):
         f = ctk.CTkFrame(parent)
         f.grid(row=0, column=0, sticky='nsew', padx=(8, 4), pady=8)
         f.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(f, text='회사 검색', font=ctk.CTkFont(size=13, weight='bold')).grid(row=0, column=0, columnspan=2, padx=10, pady=(10, 6), sticky='w')
+        self.search_title = ctk.CTkLabel(f, text='회사 검색', font=ctk.CTkFont(size=13, weight='bold'))
+        self.search_title.grid(row=0, column=0, columnspan=2, padx=10, pady=(10, 6), sticky='w')
         row = ctk.CTkFrame(f, fg_color='transparent')
         row.grid(row=1, column=0, columnspan=2, sticky='ew', padx=10)
         row.grid_columnconfigure(0, weight=1)
@@ -147,6 +207,7 @@ class DartApp(ctk.CTk):
         entry = ctk.CTkEntry(row, textvariable=self.search_var, placeholder_text='회사명 입력 후 엔터')
         entry.grid(row=0, column=0, sticky='ew', padx=(0, 6))
         entry.bind('<Return>', lambda _: self._do_search())
+        self.search_entry = entry
         ctk.CTkButton(row, text='검색', width=64, command=self._do_search).grid(row=0, column=1)
         lb_wrap = ctk.CTkFrame(f, fg_color='transparent')
         lb_wrap.grid(row=2, column=0, columnspan=2, sticky='ew', padx=10, pady=(8, 0))
@@ -190,6 +251,7 @@ class DartApp(ctk.CTk):
     def _build_analysis(self, parent):
         tabview = ctk.CTkTabview(parent)
         tabview.grid(row=0, column=0, sticky='nsew', padx=8, pady=8)
+        self._kr_tabview = tabview
         for name in _ANALYSIS_TABS:
             tabview.add(name)
         fin_tab = tabview.tab('핵심재무')
@@ -336,6 +398,9 @@ class DartApp(ctk.CTk):
         keyword = self.search_var.get().strip()
         if not keyword:
             return
+        if self.market_mode == 'US':
+            self._load_us(keyword)
+            return
 
         def run():
             api_key = self.api_key_var.get().strip()
@@ -348,6 +413,111 @@ class DartApp(ctk.CTk):
             results = search_company(self.corp_list, keyword)
             self._log(f"'{keyword}' 검색 결과: {len(results)}건")
             self.after(0, lambda: self._fill_listbox(results))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    # ── 미국 분석 (KR/US 토글) ───────────────────────────────────────────────
+
+    def _on_market_change(self, value):
+        self.market_mode = 'US' if '미국' in value else 'KR'
+        self._switch_market()
+
+    def _switch_market(self):
+        if self.market_mode == 'US':
+            self._kr_tabview.grid_remove()
+            self._us_frame.grid()
+            self.search_title.configure(text='미국 종목 검색')
+            self.search_entry.configure(placeholder_text='티커 입력 후 엔터 (예: NVDA)')
+        else:
+            self._us_frame.grid_remove()
+            self._kr_tabview.grid()
+            self.search_title.configure(text='회사 검색')
+            self.search_entry.configure(placeholder_text='회사명 입력 후 엔터')
+
+    def _build_us_panel(self, parent):
+        self._us_frame = ctk.CTkScrollableFrame(parent, fg_color='transparent')
+        self._us_frame.grid(row=0, column=0, sticky='nsew', padx=8, pady=8)
+        self._us_frame.grid_columnconfigure(0, weight=1)
+        self._render_us('initial')
+        self._us_frame.grid_remove()
+
+    def _us_table(self, start_row, title, rowdefs, annual, years):
+        ctk.CTkLabel(self._us_frame, text=f'▸ {title}', font=ctk.CTkFont(size=13, weight='bold')).grid(row=start_row, column=0, sticky='w', padx=10, pady=(10, 2))
+        f = ctk.CTkFrame(self._us_frame, fg_color='transparent')
+        f.grid(row=start_row + 1, column=0, sticky='w', padx=14, pady=(0, 4))
+        col_w = 96
+        ctk.CTkLabel(f, text='지표', font=ctk.CTkFont(weight='bold'), width=150, anchor='w').grid(row=0, column=0, padx=(0, 6), pady=3, sticky='w')
+        for ci, yr in enumerate(years):
+            ctk.CTkLabel(f, text=yr, font=ctk.CTkFont(weight='bold'), width=col_w, anchor='e').grid(row=0, column=ci + 1, padx=3, pady=3)
+        for ri, (label, key, kind) in enumerate(rowdefs):
+            ctk.CTkLabel(f, text=label, width=150, anchor='w').grid(row=ri + 1, column=0, padx=(0, 6), pady=3, sticky='w')
+            for ci, row_data in enumerate(annual):
+                text, color = _fmt_us(row_data.get(key), kind)
+                ctk.CTkLabel(f, text=text, text_color=color, width=col_w, anchor='e').grid(row=ri + 1, column=ci + 1, padx=3, pady=3)
+        return start_row + 2
+
+    def _render_us(self, state, data=None):
+        "미국 분석 패널 갱신. state: 'initial'|'loading'|'done'|'error'"
+        for w in self._us_frame.winfo_children():
+            w.destroy()
+        msgs = {'initial': ('🇺🇸 미국 모드 — 티커를 입력하면 재무분석이 표시됩니다. (예: NVDA, MSFT)', 'gray'),
+                'loading': ('불러오는 중... (SEC EDGAR / Yahoo)', 'gray'),
+                'error': ('데이터를 불러오지 못했습니다. 티커를 확인하세요 (외국기업은 Yahoo로 폴백).', '#FF6B6B')}
+        if state in msgs:
+            text, color = msgs[state]
+            ctk.CTkLabel(self._us_frame, text=text, text_color=color, wraplength=560, justify='left').grid(row=0, column=0, sticky='w', padx=8, pady=12)
+            return
+
+        ov, val, g = data['overview'], data['valuation'], data['growth']
+        years, annual = data['years'], data['annual']
+        r = 0
+        ctk.CTkLabel(self._us_frame, text=f"{ov['name']}  ({data['ticker']})", font=ctk.CTkFont(size=16, weight='bold')).grid(row=r, column=0, sticky='w', padx=10, pady=(6, 2)); r += 1
+        sub = f"데이터원: {data.get('source', '?')}    |    시가총액: {_fmt_usd(ov['market_cap'])[0]}"
+        if ov.get('sector'):
+            sub = f"{ov['sector']}    |    " + sub
+        ctk.CTkLabel(self._us_frame, text=sub, text_color='gray70').grid(row=r, column=0, sticky='w', padx=10, pady=(0, 2)); r += 1
+        m = lambda x: _fmt_mult(x)[0]
+        p = lambda x: _fmt_ratio_val(x)[0]
+        valline = (f"PER {m(val['per'])}   PBR {m(val['pbr'])}   PSR {m(val['psr'])}   "
+                   f"EV/EBITDA {m(val['ev_ebitda'])}   FCF수익률 {p(val['fcf_yield'])}   배당 {p(val['dividend_yield'])}")
+        ctk.CTkLabel(self._us_frame, text=valline, text_color='gray70').grid(row=r, column=0, sticky='w', padx=10, pady=(0, 8)); r += 1
+
+        r = self._us_table(r, '현금창출능력', _US_CASH_ROWS, annual, years)
+        r = self._us_table(r, '수익성', _US_PROFIT_ROWS, annual, years)
+        r = self._us_table(r, '안정성', _US_STAB_ROWS, annual, years)
+
+        ctk.CTkLabel(self._us_frame, text='▸ 성장성', font=ctk.CTkFont(size=13, weight='bold')).grid(row=r, column=0, sticky='w', padx=10, pady=(10, 2)); r += 1
+        gl = (f"매출 YoY {p(g['revenue_yoy'])}    매출 CAGR {p(g['revenue_cagr'])}    "
+              f"영업이익 YoY {p(g['operating_income_yoy'])}    순이익 YoY {p(g['net_income_yoy'])}    "
+              f"CFO YoY {p(g['cfo_yoy'])}    FCF YoY {p(g['fcf_yoy'])}")
+        ctk.CTkLabel(self._us_frame, text=gl, text_color='gray80', wraplength=580, justify='left').grid(row=r, column=0, sticky='w', padx=14, pady=(0, 6)); r += 1
+        ctk.CTkLabel(self._us_frame, text='※ 과거 재무 기준 — 미래 예측이 아니라 후보 압축용입니다.', text_color='gray50').grid(row=r, column=0, sticky='w', padx=14, pady=(4, 10)); r += 1
+
+    def _load_us(self, ticker):
+        self.after(0, lambda: self._render_us('loading'))
+
+        def run():
+            try:
+                try:
+                    import sec_engine
+                    import us_engine
+                except Exception as e:
+                    self._log(f'미국 분석 모듈 임포트 실패 (pip install yfinance pandas): {e}')
+                    self.after(0, lambda: self._render_us('error'))
+                    return
+                a = sec_engine.analyze(ticker, log_fn=self._log)
+                if not a['ok']:
+                    self._log(f"EDGAR 실패 → Yahoo 재시도: {a['error']}")
+                    a = us_engine.analyze(ticker, log_fn=self._log)
+                if not a['ok']:
+                    self._log(f"미국 조회 실패: {a['error']}")
+                    self.after(0, lambda: self._render_us('error'))
+                    return
+                self._log(f"[{a['ticker']}] {a.get('source')} 분석 완료")
+                self.after(0, lambda: self._render_us('done', data=a))
+            except Exception as e:
+                self._log(f'미국 데이터 오류: {e}')
+                self.after(0, lambda: self._render_us('error'))
 
         threading.Thread(target=run, daemon=True).start()
 

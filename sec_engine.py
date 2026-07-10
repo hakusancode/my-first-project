@@ -94,10 +94,21 @@ def _get_facts(cik10, log=lambda m: None):
     return facts
 
 
-def resolve_cik(ticker, log=lambda m: None):
+def resolve_cik(query, log=lambda m: None):
+    """티커 또는 회사명으로 (CIK10, title, ticker_symbol) 반환. 못 찾으면 None."""
     m = _load_ticker_map(log)
-    hit = m.get(ticker.strip().upper())
-    return None if hit is None else (f"{hit[0]:010d}", hit[1])
+    q = query.strip().upper()
+    # 1) 정확한 티커
+    hit = m.get(q)
+    if hit is not None:
+        return (f"{hit[0]:010d}", hit[1], q)
+    # 2) 회사명(title) 부분일치 — 가장 짧은(가장 정확한) 것 우선
+    cands = [(tk, cik, title) for tk, (cik, title) in m.items() if q in (title or '').upper()]
+    if cands:
+        cands.sort(key=lambda x: len(x[2]))
+        tk, cik, title = cands[0]
+        return (f"{cik:010d}", title, tk)
+    return None
 
 
 # ── XBRL 개념 추출 ───────────────────────────────────────────────────────────
@@ -281,9 +292,11 @@ def _year_row(s, year):
 # ── 경량 현재가 (밸류에이션용, 선택) ─────────────────────────────────────────
 
 def _fetch_price(ticker):
-    """yfinance fast_info로 현재가만 가볍게 조회. 실패 시 None."""
+    """yfinance fast_info로 현재가만 가볍게 조회. 실패 시 None. yfinance 소음 로그는 억제."""
     try:
+        import logging
         import yfinance as yf
+        logging.getLogger("yfinance").setLevel(logging.CRITICAL)
         fi = yf.Ticker(ticker).fast_info
         price = _num(getattr(fi, "last_price", None))
         shares = _num(getattr(fi, "shares", None))
@@ -311,9 +324,10 @@ def analyze(ticker, log_fn=None, with_price=True):
         result["error"] = f"티커 목록 조회 실패: {e}"
         return result
     if cik is None:
-        result["error"] = "SEC EDGAR에서 티커를 찾지 못했습니다 (미국 상장 여부 확인)."
+        result["error"] = "SEC EDGAR에서 티커/회사명을 찾지 못했습니다 (미국 상장 여부 확인)."
         return result
-    cik10, title = cik
+    cik10, title, symbol = cik
+    result["ticker"] = symbol      # 입력이 회사명이어도 실제 티커로 정규화
 
     try:
         facts = _get_facts(cik10, log)
@@ -362,7 +376,7 @@ def analyze(ticker, log_fn=None, with_price=True):
 
     latest = annual[-1]
     # 밸류에이션: EDGAR 펀더멘털 + (선택) 경량 현재가
-    price, shares = (_fetch_price(ticker) if with_price else (None, None))
+    price, shares = (_fetch_price(symbol) if with_price else (None, None))
     if shares is None:
         shares = s["shares"].get(years[-1])
     market_cap = None if (price is None or shares is None) else price * shares

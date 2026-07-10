@@ -49,6 +49,11 @@ python dart_gui.py
 
 ## 미국주식 분석 (프로토타입, `us_engine.py` / `us_report.py`)
 
+> **GUI 통합**: `python dart_gui.py` 실행 후 상단 **🇰🇷 한국 / 🇺🇸 미국** 토글로 미국 종목도
+> 같은 화면에서 분석할 수 있습니다. 미국 모드에서는 검색창에 **티커 또는 회사명**(예: `NVDA`,
+> `NVIDIA`)을 입력하면 EDGAR 기반 현금창출·수익성·안정성·밸류에이션이 표시됩니다.
+> (미국 분석은 DART 인증키가 필요 없습니다.)
+
 한국(DART)에 더해 **미국 상장기업의 현금창출능력**을 분석하는 프로토타입입니다.
 데이터는 [yfinance](https://github.com/ranaroussi/yfinance)(Yahoo Finance)에서 가져오며,
 **현금창출**(영업현금흐름·FCF·FCF마진·이익의 질·CapEx강도)을 중심에 두고
