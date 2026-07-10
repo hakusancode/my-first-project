@@ -1,30 +1,31 @@
-# DART 공시 다운로더 & 기업분석 (dart_downloader)
+# 기업 재무분석 도구 (corp-financial-analysis)
 
-DART(금융감독원 전자공시시스템, [opendart.fss.or.kr](https://opendart.fss.or.kr)) OpenAPI를 이용해
-한국 상장기업의 **정기공시 원문을 내려받고**, **재무·배당·지배구조 등을 한눈에 분석**하는 데스크톱 GUI 앱입니다.
+한국(DART)·미국(SEC EDGAR·Yahoo) 상장기업의 **재무·성장성·안정성·배당·현금흐름**을
+한 화면에서 분석하는 데스크톱 GUI 앱입니다.
 
-- **언어/런타임**: Python 3.12+
-- **GUI**: CustomTkinter (다크 테마)
-- **구성**: `dart_engine.py`(API·데이터 로직) + `dart_gui.py`(화면)
+- **한국**: DART(금융감독원 전자공시, [opendart.fss.or.kr](https://opendart.fss.or.kr)) — 정기공시 원문 다운로드 + 9개 분석 탭
+- **미국**: SEC EDGAR 공식 XBRL(기본) / Yahoo — 티커·회사명으로 재무분석 (인증키 불필요)
+- **언어/런타임**: Python 3.12+ · **GUI**: CustomTkinter (다크 테마)
 
-> 이 저장소의 `.py` 소스는 배포된 `dart_downloader.exe`(PyInstaller 번들)를
-> 바이트코드 역어셈블을 통해 **원본과 동작이 동일하도록 복원**한 것입니다.
+> 이 저장소의 `.py` 소스는 원래 배포된 `dart_downloader.exe`(PyInstaller 번들)를
+> 바이트코드 역어셈블로 복원한 뒤, 미국 분석·현금흐름 등을 추가·발전시킨 것입니다.
 
-## 준비물
+## 실행 (어느 컴퓨터에서나)
 
-1. **DART OpenAPI 인증키** — [OpenDART](https://opendart.fss.or.kr/) 가입 후 무료 발급.
-2. **패키지 설치**
-   ```bash
-   pip install -r requirements.txt
-   ```
+**가장 쉬운 방법 — 자동 설치 런처** (가상환경 생성 + 패키지 설치 + 실행 자동):
 
-## 실행
+- **Windows**: `run.bat` 더블클릭
+- **macOS / Linux**: 터미널에서 `chmod +x run.sh && ./run.sh`
 
+**수동 실행:**
 ```bash
+pip install -r requirements.txt
 python dart_gui.py
 ```
 
-실행 후 화면 상단에 발급받은 **인증키**를 입력하고, 저장 폴더를 지정한 뒤 사용합니다.
+> 실행 후 상단 **🇰🇷 한국 / 🇺🇸 미국** 토글로 시장을 고릅니다.
+> 한국 분석·다운로드에는 [OpenDART 인증키](https://opendart.fss.or.kr/)(무료)가 필요하고,
+> 미국 분석은 인증키 없이 바로 됩니다.
 
 ## 주요 기능
 
@@ -33,7 +34,7 @@ python dart_gui.py
 - 시작/종료 연도 및 보고서 유형(사업/반기/분기) 선택 후 정기공시 원문(XML) 일괄 다운로드
 - 정정본 자동 제외, `.done` 마커로 중복 다운로드 스킵
 
-**2. 기업분석 8개 탭** (회사 선택 시 백그라운드 조회)
+**2. 기업분석 9개 탭** (회사 선택 시 백그라운드 조회, 현금흐름은 맨 마지막 탭)
 
 | 탭 | 내용 | DART API |
 |---|---|---|

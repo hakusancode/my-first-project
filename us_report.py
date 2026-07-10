@@ -12,11 +12,17 @@ us_report.py — 미국 기업 재무분석 CLI 데모
     python us_report.py --screen MU AVGO   # 지정 종목 랭킹
     python us_report.py --yahoo TSM        # Yahoo 소스로 조회
 
-현금창출능력(영업현금흐름·FCF·이익의 질)을 중심에 두고
-수익성·성장성·안정성·밸류에이션을 함께 보여준다.
+수익성·성장성·안정성·배당·밸류에이션을 기본으로, 현금흐름 분석을 함께 보여준다.
 """
 
 import sys
+
+# 어느 컴퓨터에서나 한글이 깨지지 않도록 표준출력을 UTF-8로 (Windows cp949 대응)
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 import us_engine as ue
 import sec_engine as se
 

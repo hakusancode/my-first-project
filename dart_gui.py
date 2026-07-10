@@ -163,7 +163,7 @@ class DartApp(ctk.CTk):
 
     def __init__(self):
         super().__init__()
-        self.title('DART 공시 다운로더')
+        self.title('기업 재무분석 도구')
         self.geometry('1480x820')
         self.minsize(1100, 620)
 
