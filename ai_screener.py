@@ -66,16 +66,45 @@ _AI_TERMS = [
 ]
 
 
-def score_text(text):
-    """사업설명 텍스트의 AI 노출도 점수와 매칭 키워드를 반환.
+# 한국 사업보고서용 한글 키워드 사전 (한/영 혼용). 대소문자 무시로 매칭.
+_AI_TERMS_KR = [
+    (r"인공지능", "인공지능", 3),
+    (r"머신러닝|기계학습", "머신러닝", 3),
+    (r"딥러닝|심층학습", "딥러닝", 3),
+    (r"생성형", "생성형AI", 3),
+    (r"초거대", "초거대AI", 3),
+    (r"거대\s*언어\s*모델|대규모\s*언어\s*모델|\bLLM\b", "LLM", 3),
+    (r"신경망", "신경망", 3),
+    (r"\bHBM\b", "HBM", 3),
+    (r"\bGPU\b", "GPU", 3),
+    (r"온디바이스", "온디바이스", 3),
+    (r"파운데이션\s*모델", "파운데이션모델", 3),
+    (r"AI\s*반도체|인공지능\s*반도체", "AI반도체", 3),
+    (r"데이터\s*센터", "데이터센터", 2),
+    (r"자율주행", "자율주행", 2),
+    (r"컴퓨터\s*비전", "컴퓨터비전", 2),
+    (r"자연어", "자연어처리", 2),
+    (r"챗봇", "챗봇", 2),
+    (r"빅데이터", "빅데이터", 2),
+    (r"로보틱스|로봇", "로보틱스", 2),
+    (r"AI\s*추론|추론\s*엔진|추론\s*가속", "AI추론", 2),
+    (r"\bAI\b", "AI", 1),
+    (r"반도체", "반도체", 1),
+    (r"클라우드", "클라우드", 1),
+    (r"자동화", "자동화", 1),
+    (r"알고리즘", "알고리즘", 1),
+]
+
+
+def score_text(text, terms=_AI_TERMS):
+    """텍스트의 AI 노출도 점수와 매칭 키워드를 반환. (대소문자 무시)
     반환: (score: float, matched: [(label, count, weight), ...])"""
     if not text:
         return 0.0, []
-    t = text.lower()
     score = 0.0
     agg = {}  # label -> (count, weight)
-    for pat, label, w in _AI_TERMS:
-        n = len(re.findall(pat, t))
+    for pat, label, w in terms:
+        n = len(re.findall(pat, text, re.IGNORECASE))
         if n:
             score += w * min(n, 3)   # 과다 반복 상한
             c, _ = agg.get(label, (0, w))
@@ -123,6 +152,80 @@ def analyze_ai(ticker, with_financials=True, log_fn=None):
     return out
 
 
+# ── 한국(DART 사업보고서) AI 탐지 ────────────────────────────────────────────
+
+import os
+import html
+
+
+def _read_dart_text(path):
+    """DART 문서 파일을 인코딩 자동판별로 읽는다 (UTF-8 → CP949)."""
+    b = open(path, "rb").read()
+    for enc in ("utf-8", "cp949", "euc-kr"):
+        try:
+            return b.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return b.decode("utf-8", "replace")
+
+
+def _strip_tags(s):
+    """XML/HTML 태그 제거 + 엔티티 복원 + 공백 정리 → 평문."""
+    s = re.sub(r"<[^>]+>", " ", s)
+    s = html.unescape(s)
+    return re.sub(r"\s+", " ", s)
+
+
+def kr_business_text(api_key, corp_code, year=2024, log_fn=None, cache_root="kr_reports"):
+    """corp_code의 사업보고서 원문을 받아 평문 텍스트로 반환. 없으면 ''."""
+    import dart_engine as de
+    disc = de.list_disclosures(api_key, corp_code, f"{year}0101", f"{year + 1}1231",
+                               report_types=["사업보고서"], log_fn=log_fn)
+    if not disc:
+        return ""
+    rcept_no = disc[0]["rcept_no"]          # 최신 사업보고서
+    save_dir = os.path.join(cache_root, rcept_no)
+    de.download_document(api_key, rcept_no, save_dir, log_fn=log_fn)
+    parts = []
+    for fn in sorted(os.listdir(save_dir)):
+        if fn.lower().endswith(".xml"):
+            parts.append(_strip_tags(_read_dart_text(os.path.join(save_dir, fn))))
+    return "\n".join(parts)
+
+
+def analyze_ai_kr(api_key, company, year=2024, corp_list=None, log_fn=None):
+    """한국 기업의 사업보고서 기반 AI 노출도를 반환."""
+    import dart_engine as de
+    if corp_list is None:
+        corp_list = de.load_corp_list(api_key, log_fn=log_fn)
+    hits = de.search_company(corp_list, company)
+    if not hits:
+        return {"company": company, "ok": False, "error": "검색 결과 없음",
+                "ai_score": -1, "matched": []}
+    exact = [h for h in hits if h["corp_name"] == company]
+    corp = exact[0] if exact else hits[0]
+    text = kr_business_text(api_key, corp["corp_code"], year, log_fn=log_fn)
+    if not text:
+        return {"company": corp["corp_name"], "corp_code": corp["corp_code"], "ok": False,
+                "error": "사업보고서 없음", "ai_score": -1, "matched": []}
+    score, matched = score_text(text, _AI_TERMS_KR)
+    return {"company": corp["corp_name"], "corp_code": corp["corp_code"], "ok": True,
+            "ai_score": score, "matched": matched, "text_len": len(text)}
+
+
+def screen_ai_kr(api_key, companies, year=2024, log_fn=None):
+    """여러 한국 기업을 AI 노출도 내림차순으로 랭킹 (회사목록 1회 로드)."""
+    import dart_engine as de
+    corp_list = de.load_corp_list(api_key, log_fn=log_fn)
+    rows = []
+    for c in companies:
+        if log_fn:
+            log_fn(f"{c} 사업보고서 분석 중...")
+        rows.append(analyze_ai_kr(api_key, c, year, corp_list=corp_list, log_fn=None))
+    rows.sort(key=lambda r: -r["ai_score"])
+    return rows
+
+
 def screen_ai(tickers, with_financials=True, log_fn=None):
     """여러 종목을 AI 노출도 내림차순으로 랭킹."""
     rows = []
@@ -154,8 +257,35 @@ def _pct(v):
     return "N/A" if v is None else f"{v:.1f}%"
 
 
+def _main_kr(args):
+    key = os.environ.get("DART_API_KEY", "")
+    if not key:
+        print("한국(--kr) 모드는 DART 인증키가 필요합니다.")
+        print("  예: $env:DART_API_KEY='키'; python ai_screener.py --kr 삼성전자 SK하이닉스")
+        return
+    companies = args or ["삼성전자", "SK하이닉스", "NAVER", "농심"]
+    print(f"\n[한국] 사업보고서 기반 AI 노출도 탐지 ({len(companies)}개)...\n")
+    rows = screen_ai_kr(key, companies, log_fn=lambda m: print(f"  · {m}"))
+
+    print("\n" + "=" * 74)
+    print("  [한국] AI 노출도 랭킹 (DART 사업보고서 키워드 기반)")
+    print("=" * 74)
+    print(f"  {'#':<3}{'회사':<14}{'AI점수':>6}   주요 키워드")
+    print("  " + "-" * 70)
+    for i, r in enumerate(rows, 1):
+        if not r["ok"]:
+            print(f"  {i:<3}{r['company']:<14}{'-':>6}   ({r.get('error', '실패')})")
+            continue
+        kws = ", ".join(f"{lbl}×{c}" if c > 1 else lbl for lbl, c, w in r["matched"][:6])
+        print(f"  {i:<3}{r['company']:<14}{r['ai_score']:>6.0f}   {kws}")
+    print("\n  ※ 사업보고서(공시) 기준 AI 노출도입니다. 미래 예측이 아니라 후보 압축용입니다.")
+
+
 def main(argv):
     args = argv[1:]
+    if "--kr" in args:
+        _main_kr([a for a in args if a != "--kr"])
+        return
     with_fin = "--no-fin" not in args
     args = [a for a in args if a != "--no-fin"]
     tickers = args or _DEFAULT
