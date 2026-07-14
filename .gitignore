@@ -17,6 +17,9 @@ sec_cache/
 # 한국 AI 탐지용 사업보고서 다운로드 캐시
 kr_reports/
 
+# 스크리너 CSV 출력
+*.csv
+
 # IDE
 .vscode/
 .idea/
