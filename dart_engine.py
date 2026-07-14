@@ -1,6 +1,7 @@
 import re
 import io
 import os
+import html
 import zipfile
 import xml.etree.ElementTree as ET
 import requests
@@ -20,7 +21,8 @@ def load_corp_list(api_key, cache_path='CORPCODE.xml', log_fn=None):
     """
     DART 전체 회사 목록을 반환한다.
     cache_path 파일이 없으면 다운로드 후 저장, 있으면 캐시 사용.
-    반환값: [{"corp_code": "...", "corp_name": "..."}, ...]
+    반환값: [{"corp_code": "...", "corp_name": "...", "stock_code": "..."}, ...]
+    stock_code는 상장사만 6자리, 비상장사는 ''.
     """
     def log(msg):
         if log_fn:
@@ -42,6 +44,7 @@ def load_corp_list(api_key, cache_path='CORPCODE.xml', log_fn=None):
         {
             'corp_code': item.findtext('corp_code', ''),
             'corp_name': item.findtext('corp_name', ''),
+            'stock_code': (item.findtext('stock_code', '') or '').strip(),
         }
         for item in tree.getroot().findall('list')
     ]
@@ -59,21 +62,38 @@ _KO_TO_EN = {
     '디엘': 'DL',
 }
 
+# 'KT&G' → '케이티앤지' 처럼 &가 낀 사명을 한글 등록명으로 되돌릴 때만 쓰는 알파벳 표기
+_EN_LETTER_TO_KO = {
+    'G': '지', 'B': '비', 'F': '에프', 'S': '에스', 'T': '티', 'C': '씨', 'M': '엠',
+}
+
 
 def search_company(corp_list, keyword):
     """
     keyword가 corp_name에 포함된 항목을 반환한다 (부분일치, 대소문자 무시).
-    한글 표기(에스케이 → SK 등) 자동 변환 후 원래 키워드와 합산, 중복 제거.
-    반환값: [{"corp_code": "...", "corp_name": "..."}, ...]
+    한글↔영문 표기(에스케이 ↔ SK 등)를 양방향 변환해 원래 키워드와 합산, 중복 제거.
+    DART는 회사에 따라 'SK하이닉스'처럼 영문으로, '케이티앤지'처럼 한글로 등록한다.
+    반환값: [{"corp_code": "...", "corp_name": "...", "stock_code": "..."}, ...]
     """
     def _match(kw, corp_name_upper):
         return kw.upper() in corp_name_upper
 
-    converted = keyword
-    for ko, en in _KO_TO_EN.items():
-        converted = converted.replace(ko, en)
+    keyword = html.unescape(keyword).strip()      # 'KT&amp;G' → 'KT&G'
 
-    keywords = list(dict.fromkeys([keyword, converted]))
+    to_en = keyword
+    for ko, en in _KO_TO_EN.items():
+        to_en = to_en.replace(ko, en)
+
+    to_ko = keyword.upper()
+    for ko, en in sorted(_KO_TO_EN.items(), key=lambda kv: -len(kv[1])):
+        to_ko = to_ko.replace(en, ko)
+    if '&' in to_ko:
+        # 'KT&G' → '케이티&G' → '케이티앤G' → '케이티앤지' (DART 등록명)
+        to_ko = to_ko.replace('&', '앤')
+        for en, ko in _EN_LETTER_TO_KO.items():
+            to_ko = to_ko.replace(en, ko)
+
+    keywords = list(dict.fromkeys([keyword, to_en, to_ko]))
 
     seen = set()
     results = []
@@ -317,14 +337,23 @@ def _parse_div(raw, val_type):
 
 
 def _find_div(items, se_kw, stock_filter, col):
-    """se 부분일치 + stock_knd 필터로 항목 찾아 해당 연도 컬럼 값 반환."""
-    for item in items:
-        if se_kw not in item.get('se', ''):
-            continue
-        if stock_filter and item.get('stock_knd') != stock_filter:
-            continue
-        return item.get(col, '')
-    return ''
+    """se 부분일치 + stock_knd 필터로 항목 찾아 해당 연도 컬럼 값 반환.
+
+    우선주가 없는 기업(KB금융 등)은 stock_knd를 '보통주'가 아니라 '-'로 신고한다.
+    따라서 종류 일치 항목이 없으면 종류 미표기('-'/공백) 항목으로 폴백한다.
+    같은 se가 여러 줄일 수 있어(값이 '-'인 빈 줄 포함) 실제 값이 있는 줄을 고른다.
+    """
+    cands = [i for i in items if se_kw in i.get('se', '')]
+    if stock_filter:
+        exact = [i for i in cands if i.get('stock_knd') == stock_filter]
+        cands = exact or [i for i in cands
+                          if (i.get('stock_knd') or '').strip() in ('-', '')]
+
+    for item in cands:
+        raw = item.get(col, '')
+        if raw and raw.strip() not in ('-', ''):
+            return raw
+    return cands[0].get(col, '') if cands else ''
 
 
 def get_dividend_info(api_key, corp_code, bsns_year, reprt_code='11011', log_fn=None):

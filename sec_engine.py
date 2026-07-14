@@ -143,11 +143,16 @@ def _days(a, b):
         return None
 
 
-def _annual_duration(gaap, concepts, unit="USD"):
+def _annual_duration(gaap, concepts, unit="USD", priority=False):
     """
     연간 기간항목(매출·현금흐름 등) → {연도(int): 값}.
     10-K/20-F 등 연간보고서의 FY, 기간≈1년 자료만. 종료일 연도로 키.
     폴백 체인의 모든 개념을 합쳐서(태그 마이그레이션 대응) 연도별 최신 신고분 우선.
+
+    priority=True면 개념 순서를 우선순위로 취급해, 앞선 개념이 값을 준 연도는
+    뒤 개념으로 덮어쓰지 않는다. 한 기업이 여러 개념을 동시에 신고하고 그중
+    하나가 부분집합일 때(예: capex의 PP&E vs 기타 유형자산) 작은 쪽이 잡혀
+    금액이 과소계상되는 것을 막는다.
     """
     best = {}  # year -> (filed, val)
     for name in concepts:
@@ -171,9 +176,14 @@ def _annual_duration(gaap, concepts, unit="USD"):
                 continue
             year = int(end[:4])
             filed = f.get("filed", "")
-            if year not in best or filed > best[year][0]:
-                best[year] = (filed, val)
-    return {y: v for y, (_, v) in best.items()}
+            if year in best:
+                # 우선순위 모드: 이미 상위 개념이 채운 연도는 건드리지 않는다.
+                if priority and best[year][2] != name:
+                    continue
+                if filed <= best[year][0]:
+                    continue
+            best[year] = (filed, val, name)
+    return {y: v for y, (_, v, _n) in best.items()}
 
 
 def _annual_instant(gaap, concepts, unit="USD"):
@@ -219,9 +229,13 @@ _C = {
             "DepreciationAndAmortization"],
     "cfo": ["NetCashProvidedByUsedInOperatingActivities",
             "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"],
-    "capex": ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"],
+    # 앞쪽이 우선(priority=True). 통신사는 2019년경 Other~로, 리츠는 자본적개선(capital
+    # improvements)으로 태그가 갈린다. 리츠의 부동산 '취득'은 성장투자라 capex에서 제외.
+    "capex": ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets",
+              "PaymentsToAcquireOtherProductiveAssets", "PaymentsForCapitalImprovements"],
     "dps": ["CommonStockDividendsPerShareDeclared", "CommonStockDividendsPerShareCashPaid"],
-    "div_paid": ["PaymentsOfDividendsCommonStock", "PaymentsOfDividends", "PaymentsOfDividendsCommon"],
+    "div_paid": ["PaymentsOfDividendsCommonStock", "PaymentsOfDividends", "PaymentsOfDividendsCommon",
+                 "PaymentsOfOrdinaryDividends"],
     "total_assets": ["Assets"],
     "equity": ["StockholdersEquity",
                "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
@@ -245,8 +259,9 @@ def _build_series(gaap, dei):
         "operating_income": dur("operating_income"), "net_income": dur("net_income"),
         "pretax": dur("pretax"), "tax": dur("tax"),
         "interest_expense": dur("interest_expense"), "dna": dur("dna"),
-        "cfo": dur("cfo"), "capex": dur("capex"), "dps": dur("dps"),
-        "div_paid": dur("div_paid"),
+        "cfo": dur("cfo"), "capex": _annual_duration(gaap, _C["capex"], priority=True),
+        "dps": dur("dps"),
+        "div_paid": _annual_duration(gaap, _C["div_paid"], priority=True),
         "eps_diluted": _annual_duration(gaap, _C["eps_diluted"], unit="USD/shares"),
         "total_assets": ins("total_assets"), "equity": ins("equity"),
         "current_assets": ins("current_assets"), "current_liabilities": ins("current_liabilities"),
