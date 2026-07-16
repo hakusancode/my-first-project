@@ -869,13 +869,13 @@ def get_major_shareholder(api_key, corp_code, bsns_year, reprt_code='11011', log
     def _parse_float(raw):
         try:
             return float(raw.replace(',', ''))
-        except:
+        except Exception:
             return None
 
     def _parse_int(raw):
         try:
             return int(raw.replace(',', ''))
-        except:
+        except Exception:
             return None
 
     results = []
@@ -925,13 +925,13 @@ def get_employee_status(api_key, corp_code, bsns_year, reprt_code='11011', log_f
     def _int(raw):
         try:
             return int(raw.replace(',', ''))
-        except:
+        except Exception:
             return None
 
     def _float(raw):
         try:
             return float(raw.strip())
-        except:
+        except Exception:
             return None
 
     gender_rows = []

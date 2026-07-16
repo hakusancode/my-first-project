@@ -447,7 +447,6 @@ class DartApp(ctk.CTk):
         f = ctk.CTkFrame(outer, fg_color='transparent')
         f.grid(row=1, column=0, sticky='n')
         col_w = 110
-        row_h = 32
         ctk.CTkLabel(f, text='항목', font=ctk.CTkFont(weight='bold'), width=120, anchor='w').grid(row=0, column=0, padx=(0, 8), pady=4, sticky='w')
         for ci, yr in enumerate(years):
             ctk.CTkLabel(f, text=f'{yr}년', font=ctk.CTkFont(weight='bold'), width=col_w, anchor='e').grid(row=0, column=ci + 1, padx=4, pady=4)
@@ -457,7 +456,6 @@ class DartApp(ctk.CTk):
             if label == '자산총계':
                 sep2 = ctk.CTkFrame(f, height=1, fg_color='gray30')
                 sep2.grid(row=ri * 2 + 2, column=0, columnspan=len(years) + 1, sticky='ew', pady=2)
-            row_idx = ri * 2 + 3 if label != '매출액' else ri * 2 + 2
             ctk.CTkLabel(f, text=label, width=120, anchor='w').grid(row=ri + 2, column=0, padx=(0, 8), pady=6, sticky='w')
             for ci, row_data in enumerate(data):
                 val = row_data.get(label)
@@ -564,16 +562,23 @@ class DartApp(ctk.CTk):
         ov, val, g = data['overview'], data['valuation'], data['growth']
         years, annual = data['years'], data['annual']
         r = 0
-        ctk.CTkLabel(self._us_frame, text=f"{ov['name']}  ({data['ticker']})", font=ctk.CTkFont(size=16, weight='bold')).grid(row=r, column=0, sticky='w', padx=10, pady=(6, 2)); r += 1
+        ctk.CTkLabel(self._us_frame, text=f"{ov['name']}  ({data['ticker']})", font=ctk.CTkFont(size=16, weight='bold')).grid(row=r, column=0, sticky='w', padx=10, pady=(6, 2))
+        r += 1
         sub = f"데이터원: {data.get('source', '?')}    |    시가총액: {_fmt_usd(ov['market_cap'])[0]}"
         if ov.get('sector'):
             sub = f"{ov['sector']}    |    " + sub
-        ctk.CTkLabel(self._us_frame, text=sub, text_color='gray70').grid(row=r, column=0, sticky='w', padx=10, pady=(0, 2)); r += 1
-        m = lambda x: _fmt_mult(x)[0]
-        p = lambda x: _fmt_ratio_val(x)[0]
+        ctk.CTkLabel(self._us_frame, text=sub, text_color='gray70').grid(row=r, column=0, sticky='w', padx=10, pady=(0, 2))
+        r += 1
+        def m(x):
+            return _fmt_mult(x)[0]
+
+        def p(x):
+            return _fmt_ratio_val(x)[0]
+
         valline = (f"PER {m(val['per'])}   PBR {m(val['pbr'])}   PSR {m(val['psr'])}   "
                    f"EV/EBITDA {m(val['ev_ebitda'])}   FCF수익률 {p(val['fcf_yield'])}   배당 {p(val['dividend_yield'])}")
-        ctk.CTkLabel(self._us_frame, text=valline, text_color='gray70').grid(row=r, column=0, sticky='w', padx=10, pady=(0, 8)); r += 1
+        ctk.CTkLabel(self._us_frame, text=valline, text_color='gray70').grid(row=r, column=0, sticky='w', padx=10, pady=(0, 8))
+        r += 1
 
         # 연도별 성장성(전년대비) 표 데이터 구성
         growth_annual = []
@@ -596,8 +601,10 @@ class DartApp(ctk.CTk):
 
         cagr = (f"매출 3년 CAGR {p(g['revenue_cagr'])}    영업이익 YoY {p(g['operating_income_yoy'])}    "
                 f"FCF YoY {p(g['fcf_yoy'])}")
-        ctk.CTkLabel(self._us_frame, text=cagr, text_color='gray70').grid(row=r, column=0, sticky='w', padx=14, pady=(6, 2)); r += 1
-        ctk.CTkLabel(self._us_frame, text='※ 과거 재무 기준 — 미래 예측이 아니라 후보 압축용입니다.', text_color='gray50').grid(row=r, column=0, sticky='w', padx=14, pady=(4, 10)); r += 1
+        ctk.CTkLabel(self._us_frame, text=cagr, text_color='gray70').grid(row=r, column=0, sticky='w', padx=14, pady=(6, 2))
+        r += 1
+        ctk.CTkLabel(self._us_frame, text='※ 과거 재무 기준 — 미래 예측이 아니라 후보 압축용입니다.', text_color='gray50').grid(row=r, column=0, sticky='w', padx=14, pady=(4, 10))
+        r += 1
 
     def _load_us(self, ticker):
         self.after(0, lambda: self._render_us('loading'))

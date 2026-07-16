@@ -17,6 +17,8 @@ ai_screener.py — 기업 사업설명 기반 'AI 노출도' 자동 탐지 + 재
     python ai_screener.py --no-fin NVDA KO   # 재무 결합 없이 AI 점수만(빠름)
 """
 
+import html
+import os
 import re
 import sys
 
@@ -153,9 +155,6 @@ def analyze_ai(ticker, with_financials=True, log_fn=None):
 
 
 # ── 한국(DART 사업보고서) AI 탐지 ────────────────────────────────────────────
-
-import os
-import html
 
 
 def _read_dart_text(path):

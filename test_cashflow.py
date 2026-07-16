@@ -47,7 +47,8 @@ def main():
         print("  예: $env:DART_API_KEY='키'; python test_cashflow.py")
         return
 
-    log = lambda m: print("  ·", m)
+    def log(m):
+        print("  ·", m)
 
     print(f"\n[1] 회사 목록 로드 + '{company}' 검색...")
     corp_list = de.load_corp_list(key, log_fn=log)

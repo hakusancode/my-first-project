@@ -252,8 +252,12 @@ _C = {
 
 def _build_series(gaap, dei):
     """모든 개념을 연도별로 뽑아 dict of {year: val} 로 반환."""
-    dur = lambda keys: _annual_duration(gaap, _C[keys])
-    ins = lambda keys: _annual_instant(gaap, _C[keys])
+    def dur(keys):
+        return _annual_duration(gaap, _C[keys])
+
+    def ins(keys):
+        return _annual_instant(gaap, _C[keys])
+
     s = {
         "revenue": dur("revenue"), "gross_profit": dur("gross_profit"),
         "operating_income": dur("operating_income"), "net_income": dur("net_income"),
@@ -274,7 +278,9 @@ def _build_series(gaap, dei):
 
 def _year_row(s, year):
     """한 연도의 us_engine 호환 'y' dict 구성."""
-    g = lambda k: s[k].get(year)
+    def g(k):
+        return s[k].get(year)
+
     revenue = g("revenue")
     op_income = g("operating_income")
     ebit = op_income               # EDGAR 근사: EBIT ≈ 영업이익
