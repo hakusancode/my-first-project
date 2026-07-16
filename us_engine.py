@@ -314,8 +314,8 @@ def analyze(ticker, log_fn=None):
     return result
 
 
-# 미국 AI 밸류체인 기본 유니버스 (프로토타입용 예시 — 자유롭게 수정)
-AI_UNIVERSE = [
+# 미국 대형주 기본 유니버스 (--screen 기본값, 프로토타입용 예시 — 자유롭게 수정)
+DEFAULT_UNIVERSE = [
     "NVDA",  # GPU
     "MSFT",  # 클라우드/코파일럿
     "GOOGL", # 클라우드/제미나이
@@ -343,7 +343,7 @@ def screen(tickers=None, log_fn=None):
             log_fn(msg)
 
     if tickers is None:
-        tickers = AI_UNIVERSE
+        tickers = DEFAULT_UNIVERSE
 
     rows = []
     for tk in tickers:

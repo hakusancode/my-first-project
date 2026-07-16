@@ -27,7 +27,7 @@ import requests
 from us_engine import (
     _num, _safe_div, _pct, _yoy, _cagr,
     _cash_metrics, _profitability, _stability,
-    AI_UNIVERSE,
+    DEFAULT_UNIVERSE,
 )
 
 # SEC 요구: 실제 앱/연락처가 담긴 User-Agent
@@ -446,7 +446,7 @@ def screen(tickers=None, log_fn=None, with_price=True):
             log_fn(msg)
 
     if tickers is None:
-        tickers = AI_UNIVERSE
+        tickers = DEFAULT_UNIVERSE
 
     rows = []
     for tk in tickers:

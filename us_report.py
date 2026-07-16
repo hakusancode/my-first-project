@@ -237,7 +237,7 @@ def main(argv):
         print(__doc__)
         return
     if args[0] in ("--screen", "-s"):
-        tickers = args[1:] or ue.AI_UNIVERSE
+        tickers = args[1:] or ue.DEFAULT_UNIVERSE
         screen(tickers, eng)
     else:
         for tk in args:

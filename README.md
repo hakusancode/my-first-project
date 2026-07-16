@@ -72,29 +72,10 @@ python dart_gui.py
 ```bash
 python us_report.py NVDA              # 단일 상세 (기본: EDGAR)
 python us_report.py NVDA MSFT AVGO    # 여러 종목 각각
-python us_report.py --screen          # AI 밸류체인 12종목 현금창출 랭킹 (EDGAR)
+python us_report.py --screen          # 기본 유니버스 12종목 현금창출 랭킹 (EDGAR)
 python us_report.py --screen MU AVGO  # 지정 종목 랭킹
 python us_report.py --yahoo TSM       # 외국기업은 Yahoo 소스로
 ```
-
-### AI 노출도 자동 탐지 (`ai_screener.py`)
-
-수동으로 AI 종목 리스트를 만드는 대신, 각 기업이 **스스로 공시한 사업설명**에서
-AI 키워드(artificial intelligence·GPU·HBM·LLM·data center 등)를 분석해 **AI 노출도 점수**를
-자동 계산하고, 현금창출·성장성 지표와 결합해 **"AI로 현금 버는 기업"** 을 걸러냅니다.
-
-```bash
-# 미국 (yfinance 사업설명 기반, 인증키 불필요)
-python ai_screener.py                 # 기본 유니버스(AI+대조군) 랭킹
-python ai_screener.py NVDA PLTR KO    # 지정 종목
-python ai_screener.py --no-fin NVDA   # AI 점수만(빠름)
-
-# 한국 (DART 사업보고서 원문 기반, DART_API_KEY 필요)
-DART_API_KEY=키 python ai_screener.py --kr 삼성전자 SK하이닉스 NAVER 농심
-```
-
-예(미국): NVDA(AI 28·FCF마진 44.8%·ROIC 66.8%) / KO(AI 0 — 음료).
-예(한국): NAVER 94·삼성전자 83·SK하이닉스 70(HBM×14) / 농심 1. AI 점수는 공시 텍스트 기준입니다.
 
 ### 고배당주 스크리너 (`dividend_screener.py`)
 
@@ -144,7 +125,6 @@ DART_API_KEY=키 python dividend_screener.py --kr 삼성전자 'KT&G' 005930 --c
 | `us_engine.py` | 미국 재무분석 엔진 (yfinance, `analyze`/`screen`) |
 | `sec_engine.py` | 미국 재무분석 엔진 (SEC EDGAR 공식, `us_engine`과 동일 인터페이스) |
 | `us_report.py` | 미국 분석 CLI 리포트·스크리너 데모 (`--edgar`/`--yahoo`) |
-| `ai_screener.py` | 사업설명 기반 AI 노출도 자동 탐지 + 재무 결합 랭킹 CLI |
 | `dividend_screener.py` | 한·미 고배당 스크리너 (배당 함정 필터: 배당성향·FCF커버리지·연속배당) |
 | `requirements.txt` | 의존성 (customtkinter, requests, yfinance, pandas) |
 | `dart_downloader.exe` | 원본 배포 실행파일 (참고용) |
